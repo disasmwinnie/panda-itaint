@@ -1,0 +1,115 @@
+<h1 id="plugin-panda-itaint">Plugin: panda-itaint</h1>
+<h2 id="summary">Summary</h2>
+<p><code>panda_itaint</code> (input taint) is a <a href="https://github.com/panda-re/panda/">PANDA2</a> plugin, which determines which data to be tainted, by parsing Linux syscalls responsible for file reading respectively receiving network traffic.</p>
+<p>The plugin itself can be used to extract the values of syscalls. For taint analysis, however, the plugin is pretty much useless on itself. It has to be used in conjunction with other analysis plugins, which leverages the taint information. Look at moyix's <a href="https://asciinema.org/a/130615">file_taint asciinema example</a> to see how it can be used.</p>
+<p>In contrast to the <code>file_taint</code> plugin it does not support filtering file reading syscalls by file name. Instead itaint catches <strong>all</strong> relevant syscalls and outputs useful function arguments. Among them:</p>
+<ul>
+<li>file/socket descriptor</li>
+<li>buffer address and size</li>
+<li>length of actually received bytes (return value)</li>
+<li>in case of files, the file name</li>
+<li>the file respectively packet content</li>
+</ul>
+<p>Every relevant syscall is identified by an iterating number. One is expected to utilize PANDA2's Record&amp;Replay feature in order to use itaint. At first, the syscall(s) to be tainted is chosen and during the second replay, the taint is actually triggered.</p>
+<p>The plugin offers a cmdline argument to choose between tracing/tainting of file reading or receiving network traffic. Since read() is used for network and files, the plugin additionally tracks all socket() and open() calls in order to distinguish which ones to track.</p>
+<p>Currently, the plugin supports the x86 and ARM platform. The Later is, at this point, not tested.</p>
+<p><code>panda_itaint</code> supports the following syscalls:</p>
+<ul>
+<li>preadv (x86 specific)</li>
+<li>socketcall (specific to Linux-x86, wrapper around and used instead socket, recv, recvfrom, recvmsg)</li>
+<li>socket</li>
+<li>recv</li>
+<li>recvfrom</li>
+<li>recvmsg</li>
+<li>read</li>
+<li>read64</li>
+<li>readv</li>
+<li>open</li>
+<li>close</li>
+</ul>
+<h2 id="arguments">Arguments</h2>
+<ul>
+<li><strong>action</strong>: Choose action for itaint (required). <em>parse_syscalls</em> to parse syscalls, <em>taint</em> parse all syscalls and taint them (if no specific one is selected, see <em>syscall_nrs</em>)</li>
+<li><p><strong>syscall_nrs</strong> One or a list of dash separated (comma and space already reserved) integers to limit the amount of tainted syscalls. This cmdline argument can be used, after running a replay with the <em>parse_syscalls</em> parameter. All parsed syscalls are iterated with a number, starting at zero.</p></li>
+<li><p><strong>msg_type</strong> Choose which kind of messages should be parsed, choose either <em>file</em> for read files, or <em>network</em> (default) for received messages.</p></li>
+<li><p>(Currently broken) <strong>collect_procs</strong> collectes the names of all executed process during the recording and outputs them during the execution.</p></li>
+<li><p>(Currently broken) <strong>proc_name</strong>: Limit the syscall parsing respectively tainting to desired process.</p></li>
+</ul>
+<h2 id="dependencies">Dependencies</h2>
+<p><code>itaint</code> depends on the <strong>osi</strong>, <strong>osi_linux</strong> and <strong>syscalls2</strong> plugins in order to parse syscalls. And, when tainting is activated the <strong>taint2</strong> plugin.</p>
+<h2 id="known-issues">Known Issues</h2>
+<p>Collection and setting of process names is currently broken. It supposed to be a goodie in order to accelerate the initial finding of desired syscall.</p>
+<h2 id="example">Example</h2>
+<p>Record a trace:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode bash"><code class="sourceCode bash"><a class="sourceLine" id="cb1-1" data-line-number="1">$ <span class="bu">export</span> <span class="va">PANDABIN=</span>~/git/panda/build/i386-softmmu/qemu-system-i386</a>
+<a class="sourceLine" id="cb1-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb1-3" data-line-number="3">$ <span class="va">$PANDABIN</span> <span class="ex">-hda</span> <span class="va">$PATHTOVMS</span>/debian7_x86.qcow2 -monitor telnet:localhost:2222,server,nowait -vga std -display sdl -m 512 -netdev user,id=eth11,hostfwd=tcp::1122-:22 -device rtl8139,netdev=eth11 -replay ~/BIND9 -os linux-32-debian-3.2.81-686-pae -panda panda-itaint:help</a>
+<a class="sourceLine" id="cb1-4" data-line-number="4"></a>
+<a class="sourceLine" id="cb1-5" data-line-number="5"><span class="ex">PANDA</span>[core]: os_familyno=2 bits=32 os_details=debian-3.2.81-686-pae</a>
+<a class="sourceLine" id="cb1-6" data-line-number="6"><span class="ex">PANDA</span>[panda-itaint]: adding argument help.</a>
+<a class="sourceLine" id="cb1-7" data-line-number="7"><span class="ex">PANDA</span>[core]: initializing panda-itaint</a>
+<a class="sourceLine" id="cb1-8" data-line-number="8"><span class="ex">Options</span> for plugin panda-itaint:</a>
+<a class="sourceLine" id="cb1-9" data-line-number="9"><span class="ex">PLUGIN</span>              ARGUMENT                REQUIRED        DESCRIPTION</a>
+<a class="sourceLine" id="cb1-10" data-line-number="10">======              ========                ========        ===========</a>
+<a class="sourceLine" id="cb1-11" data-line-number="11"><span class="ex">--</span>]] panda-itaint plugin loaded [[--</a>
+<a class="sourceLine" id="cb1-12" data-line-number="12"><span class="ex">panda-itaint</span>        action                  Required        Choose action for itaint: parse_syscalls, taint, collect_procs</a>
+<a class="sourceLine" id="cb1-13" data-line-number="13"><span class="ex">panda-itaint</span>        proc_name               Optional        Process name, which should be tracked for tainting (default=<span class="st">&quot;(null)&quot;</span>)</a>
+<a class="sourceLine" id="cb1-14" data-line-number="14"><span class="ex">panda-itaint</span>        msg_type                Optional        Which kind of messages should be parsed, choose either<span class="st">&#39;file&#39;</span> for read files, or <span class="st">&#39;network&#39;</span>(default)<span class="bu">.</span> <span class="kw">(</span><span class="va">default=</span><span class="st">&quot;network&quot;</span><span class="kw">)</span></a>
+<a class="sourceLine" id="cb1-15" data-line-number="15"><span class="ex">panda-itaint</span>        syscall_nrs             Optional        Catched syscalls are incremented. Give predefined, dash separatedlist of syscall numbers that should trigger tainting. (default=<span class="st">&quot;(null)&quot;</span>)</a></code></pre></div>
+<p>The itaint plugin is supposed to work by first using <strong>action=parse_syscalls</strong> and the finding the desired syscall, to be tainted. Afterwards, specifying the syscall with <strong>syscall_nrs=0-2-68</strong> and enable tainting with <strong>action=taint</strong>.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode bash"><code class="sourceCode bash"><a class="sourceLine" id="cb2-1" data-line-number="1">$ <span class="va">$PANDABIN</span> <span class="ex">-hda</span> <span class="va">$PATHTOVMS</span>/debian7_x86.qcow2 -monitor telnet:localhost:2222,server,nowait -vga std -display sdl -m 512 -netdev user,id=eth11,hostfwd=tcp::1122-:22 -device rtl8139,netdev=eth11 -replay ~/BIND9 -os linux-32-debian-3.2.81-686-pae -panda panda-itaint:action=parse_syscalls,msg_type=network</a></code></pre></div>
+<pre><code>[...]
+[ITAINT](NFO): socketcall entered desired proc.
+[ITAINT](NFO): recv(from) encountered.
+  DBG: recv socket: 6
+  DBG: buf_addr: 3109068288
+  DBG: buf_size: 65536
+  DBG: flags: 0
+  RECV leng: 45
+  Base64 encoded message:
+9uaBgAABAAEAAAAAB21zZ3BlZWsDbmV0AAABAAHADAABAAEAAAcHAASKyXQE
+[ITAINT](NFO): CURRENT SYSCALL NR:
+50
+[...]</code></pre>
+<p>Examine the content of the packets and decide which ones to taint. Note, the output can get very large. You might want to pipe it into a file.</p>
+<pre><code>echo &quot;9uaBgAABAAEAAAAAB21zZ3BlZWsDbmV0AAABAAHADAABAAEAAAcHAASKyXQE&quot; | base64 -d | hexdump -C
+00000000  f6 e6 81 80 00 01 00 01  00 00 00 00 07 6d 73 67  |.............msg|
+00000010  70 65 65 6b 03 6e 65 74  00 00 01 00 01 c0 0c 00  |peek.net........|
+00000020  01 00 01 00 00 07 07 00  04 8a c9 74 04           |...........t.|
+0000002d</code></pre>
+<p>Change <strong>action</strong> to <em>taint</em> and set the syscall number -&gt; profit.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode bash"><code class="sourceCode bash"><a class="sourceLine" id="cb5-1" data-line-number="1">$ <span class="va">$PANDABIN</span> <span class="ex">-hda</span> <span class="va">$PATHTOVMS</span>/debian7_x86.qcow2 -monitor telnet:localhost:2222,server,nowait -vga std -display sdl -m 512 -netdev user,id=eth11,hostfwd=tcp::1122-:22 -device rtl8139,netdev=eth11 -replay ~/BIND9 -os linux-32-debian-3.2.81-686-pae -panda panda-itaint:action=taint,msg_type=network,syscall_nrs=50</a></code></pre></div>
+<p>This also works in a similar way for parsing read files.</p>
+<pre><code>[...]
+&gt; [ITAINT](NFO): read() encountered.
+&gt; [ITAINT](ERR): The read()-syscall returned -1 or 0.
+&gt; [ITAINT](NFO): close() encountered.
+&gt; [ITAINT](NFO): Socket CLOSED:
+&gt; 6
+&gt; [ITAINT](NFO): open() encountered.
+&gt; [ITAINT](NFO): DBG: file descriptor OPENED:
+&gt; 6
+&gt; [ITAINT](NFO):  Corresponding file_name is:
+&gt; /etc/hosts
+&gt; [ITAINT](NFO):  Corresponding flags-var is:
+&gt; 524288
+&gt; [ITAINT](NFO): read() encountered.
+&gt; [ITAINT](NFO): RET:
+&gt; 188
+&gt;         DBG: recv socket: 6
+&gt;         DBG: buf_addr: 3077705728
+&gt;         DBG: buf_size: 4096
+&gt;         DBG: flags: 0
+&gt;         RECV leng: 188
+&gt;         Base64 encoded message:
+&gt; MTI3LjAuMC4xCWxvY2FsaG9zdAoxMjcuMC4xLjEJZGViaWFudm0KCiMgVGhlIGZvbGxvd2luZyBsaW5lcyBhcmUgZGVzaXJhYmxlIGZvciBJUHY2IGNhcGFibGUgaG9zdHMKOjoxICAgICBsb2NhbGhvc3QgaXA2LWxvY2FsaG9zdCBpcDYtbG9vcGJhY2sKZmYwMjo6MSBpcDYtYWxsbm9kZXMKZmYwMjo6MiBpcDYtYWxscm91dGVycwo=
+[...]</code></pre>
+<pre><code>$ echo &quot;MTI3LjAuMC4xCWxvY2FsaG9zdAoxMjcuMC4xLjEJZGViaWFudm0KCiMgVGhlIGZvbGxvd2luZyBsaW5lcyBhcmUgZGVzaXJhYmxlIGZvciBJUHY2IGNhcGFibGUgaG9zdHMKOjoxICAgICBsb2NhbGhvc3QgaXA2LWxvY2FsaG9zdCBpcDYtbG9vcGJhY2sKZmYwMjo6MSBpcDYtYWxsbm9kZXMKZmYwMjo6MiBpcDYtYWxscm91dGVycwo=&quot; | base64 -d
+
+&gt; 127.0.0.1 localhost
+&gt; 127.0.1.1 debianvm
+&gt;
+&gt; # The following lines are desirable for IPv6 capable hosts
+&gt; ::1     localhost ip6-localhost ip6-loopback
+&gt; ff02::1 ip6-allnodes
+&gt; ff02::2 ip6-allrouters</code></pre>
